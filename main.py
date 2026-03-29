@@ -60,8 +60,33 @@ class DhurandharRAG:
                         break
             chunks.append(text[start:end].strip())
             start = end - chunk_overlap if end < len(text) else end
+        # Replace current chunks with these unless caller wants to append.
         self.chunks = chunks
         return chunks
+
+    def add_chunks(self, new_chunks):
+        """Add new chunks to the index incrementally.
+
+        Caller should append new chunks to `self.chunks` (via
+        `chunk_text(..., append=True)`) before calling this method, or
+        pass the same `new_chunks` list and this method will add vectors
+        for them to the FAISS index.
+        """
+        if not new_chunks:
+            return
+        embeddings = self.model.encode(new_chunks)
+        emb = np.array(embeddings).astype('float32')
+        dim = emb.shape[1]
+        if self.index is None:
+            self.index = faiss.IndexFlatL2(dim)
+            self.index.add(emb)
+        else:
+            # ensure same dimension
+            if self.index.d != dim:
+                # rebuild index if dimension mismatch (unlikely)
+                self.build_index()
+            else:
+                self.index.add(emb)
 
     def build_index(self):
         embeddings = self.model.encode(self.chunks)
