@@ -45,7 +45,7 @@ class DhurandharRAG:
             return data.decode('utf-8', errors='ignore')
         return str(data)
 
-    def chunk_text(self, text, chunk_size=500, chunk_overlap=50):
+    def chunk_text(self, text, chunk_size=500, chunk_overlap=50, append=False):
         text = text.strip()
         separators = ["\n\n", "\n", ". ", " ", ""]
         chunks = []
@@ -60,8 +60,10 @@ class DhurandharRAG:
                         break
             chunks.append(text[start:end].strip())
             start = end - chunk_overlap if end < len(text) else end
-        # Replace current chunks with these unless caller wants to append.
-        self.chunks = chunks
+        if append and self.chunks:
+            self.chunks.extend(chunks)
+        else:
+            self.chunks = chunks
         return chunks
 
     def add_chunks(self, new_chunks):
@@ -95,15 +97,41 @@ class DhurandharRAG:
         self.index.add(np.array(embeddings).astype('float32'))
 
     def query(self, question, k=2):
-        query_vector = self.model.encode([question]).astype('float32')
-        distances, indices = self.index.search(query_vector, k)
-        context = "\n".join([self.chunks[i] for i in indices[0]])
-        
+        if not question or not question.strip():
+            return "Please provide a question."
+
+        if not self.chunks:
+            return "Knowledge base is empty — add text or files first."
+
+        if self.index is None:
+            return "Index not built yet. Please add content to the knowledge base."
+
+        try:
+            query_vector = self.model.encode([question]).astype('float32')
+        except Exception as e:
+            return f"Embedding error: {e}"
+
+        try:
+            k_search = min(k, len(self.chunks))
+            distances, indices = self.index.search(query_vector, k_search)
+        except Exception as e:
+            return f"Index search error: {e}"
+
+        try:
+            context = "\n".join([self.chunks[i] for i in indices[0] if i != -1])
+        except Exception:
+            context = ""
+
         prompt = f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer only using the context above."
-        
-        completion = self.client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
-        )
-        return completion.choices[0].message.content
+
+        try:
+            completion = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            # Return context as a graceful fallback when model call fails
+            fallback = context[:2000] if context else ""
+            return f"Model request error: {e}\n\nContext fallback:\n{fallback}"

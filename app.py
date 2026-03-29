@@ -52,11 +52,35 @@ with col2:
 
 st.divider()
 
-# Chat section
+# Chat section with conversation history
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+
+def render_messages():
+    for msg in st.session_state.messages:
+        role = msg.get('role')
+        content = msg.get('content')
+        if role == 'user':
+            st.markdown(f"**You:** {content}")
+        else:
+            st.markdown(f"**Bot:** {content}")
+
 if st.session_state.rag:
-    st.subheader("Ask a question")
-    query = st.text_input("Ask a question about your documents:")
-    if query:
+    st.subheader("Chat with your documents")
+    render_messages()
+    user_input = st.text_input("Your question:", key='chat_input')
+    if st.button("Send") and user_input and user_input.strip():
+        # append user message
+        st.session_state.messages.append({'role': 'user', 'content': user_input})
+        rag = st.session_state.rag
         with st.spinner("Thinking..."):
-            answer = st.session_state.rag.query(query, k=k_val)
-            st.markdown(f"**Answer:**\n{answer}")
+            try:
+                answer = rag.query(user_input, k=k_val)
+            except Exception as e:
+                answer = f"Error during query: {e}"
+        st.session_state.messages.append({'role': 'bot', 'content': answer})
+        # clear input
+        st.session_state.chat_input = ''
+        st.experimental_rerun()
+else:
+    st.info("No knowledge base yet. Add text or files above.")
