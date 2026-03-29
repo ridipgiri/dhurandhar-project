@@ -2,6 +2,7 @@
 # Run with: `streamlit run app.py` (preferred) or `streamlit run web_ui.py`
 import streamlit as st
 from main import DhurandharRAG
+from groq import Groq
 
 st.set_page_config(page_title="Dhurandhar RAG", layout="wide")
 st.title("📂 Dhurandhar File RAG")
@@ -26,6 +27,17 @@ with st.sidebar:
     chunk_size = st.slider("Chunk Size", 200, 1000, 500)
     k_val = st.slider("Context Chunks (k)", 1, 5, 2)
     st.info("Supported: .pdf, .txt")
+    if st.button("Validate API Key"):
+        if not api_key:
+            st.error("Please enter an API key to validate.")
+        elif not api_key.startswith('gsk_'):
+            st.warning("The key doesn't look like a Groq key (missing 'gsk_' prefix). Will still attempt to use it.")
+        else:
+            try:
+                Groq(api_key=api_key)
+                st.success("API key appears to instantiate correctly (no network validation).")
+            except Exception as e:
+                st.error(f"Failed to instantiate Groq client: {e}")
 
 if "rag" not in st.session_state:
     st.session_state.rag = None
@@ -41,6 +53,18 @@ with col1:
         if not api_key:
             st.error("Please provide an API key in the sidebar.")
         else:
+            # If a RAG exists but the API key changed, update the client on the existing RAG.
+            if st.session_state.rag:
+                try:
+                    current_key = getattr(st.session_state.rag.client, 'api_key', None)
+                except Exception:
+                    current_key = None
+                if api_key and api_key != current_key:
+                    try:
+                        st.session_state.rag.client = Groq(api_key=api_key)
+                        st.info("Updated API key for existing knowledge base.")
+                    except Exception as e:
+                        st.error(f"Could not update API key on existing RAG: {e}")
             rag = st.session_state.rag or DhurandharRAG(api_key)
             total_new = 0
             if raw_text and raw_text.strip():
