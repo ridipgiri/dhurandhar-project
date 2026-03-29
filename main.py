@@ -2,6 +2,8 @@ import numpy as np
 import faiss
 from groq import Groq
 from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader
+import io
 
 class DhurandharRAG:
     def __init__(self, api_key):
@@ -9,6 +11,39 @@ class DhurandharRAG:
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.index = None
         self.chunks = []
+
+    def extract_text(self, uploaded_file):
+        """Extracts text from PDF or TXT files.
+
+        `uploaded_file` is expected to be a file-like object (for example,
+        Streamlit's UploadedFile). This handles PDF via pypdf and falls back
+        to reading text for other file types.
+        """
+        # Try to detect PDF by content-type or filename
+        content_type = getattr(uploaded_file, "type", None)
+        name = getattr(uploaded_file, "name", "")
+        is_pdf = (content_type == "application/pdf") or name.lower().endswith('.pdf')
+
+        # Ensure pointer at start
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+
+        if is_pdf:
+            reader = PdfReader(uploaded_file)
+            text_parts = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+            return "\n".join(text_parts)
+
+        # Fallback: read as text
+        data = uploaded_file.read()
+        if isinstance(data, bytes):
+            return data.decode('utf-8', errors='ignore')
+        return str(data)
 
     def chunk_text(self, text, chunk_size=500, chunk_overlap=50):
         text = text.strip()
