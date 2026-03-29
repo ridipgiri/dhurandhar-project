@@ -68,8 +68,11 @@ def render_messages():
 if st.session_state.rag:
     st.subheader("Chat with your documents")
     render_messages()
-    user_input = st.text_input("Your question:", key='chat_input')
-    if st.button("Send") and user_input and user_input.strip():
+    # Use a form so the input can be cleared automatically on submit
+    with st.form(key='chat_form', clear_on_submit=True):
+        user_input = st.text_input("Your question:", key='chat_input')
+        submit = st.form_submit_button("Send")
+    if submit and user_input and user_input.strip():
         # append user message
         st.session_state.messages.append({'role': 'user', 'content': user_input})
         rag = st.session_state.rag
@@ -79,8 +82,6 @@ if st.session_state.rag:
             except Exception as e:
                 answer = f"Error during query: {e}"
         st.session_state.messages.append({'role': 'bot', 'content': answer})
-        # clear input
-        st.session_state.chat_input = ''
         st.experimental_rerun()
 else:
     st.info("No knowledge base yet. Add text or files above.")
